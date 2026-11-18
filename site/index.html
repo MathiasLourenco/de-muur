@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#000000">
+<title>De muur</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%90%BF%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<link rel="preload" as="image" href="img/1-vlakte.jpg">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; background: #000; overflow: hidden; }
+  body { font: 16px/1.3 Georgia, 'Times New Roman', serif; color: #fff; cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+
+  .scene { position: fixed; inset: 0; opacity: 0; transition: opacity 1.6s ease; }
+  .scene.on { opacity: 1; }
+  .scene .blur { position: absolute; inset: -80px; background: center / cover no-repeat; filter: blur(40px) brightness(.5) saturate(1.2); }
+  .scene img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 12px 40px rgba(0, 0, 0, .55)); }
+
+  .glas { background: rgba(0, 0, 0, .38); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); color: #fff; border: 0; font: inherit; }
+  #play { position: fixed; left: 50%; top: 50%; width: 96px; height: 96px; margin: -48px 0 0 -48px; border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .85); display: grid; place-items: center; cursor: pointer; transition: opacity .4s, transform .2s; }
+  #play:hover { transform: scale(1.06); }
+  #play svg { width: 38px; height: 38px; margin-left: 6px; fill: #fff; }
+  #melding { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 14px 22px; border-radius: 999px; font-size: 18px; white-space: nowrap; transition: opacity .4s; }
+  #delen { position: fixed; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; gap: 8px; transition: opacity .4s; }
+  #delen button { font-size: 15px; padding: 8px 16px; border-radius: 999px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .35); cursor: pointer; white-space: nowrap; }
+  #delen button.actief { background: rgba(255, 255, 255, .9); color: #111; }
+  #delen button:disabled { cursor: default; color: rgba(255, 255, 255, .75); }
+  #delen.stil { opacity: .35; }
+  #delen.stil:hover { opacity: 1; }
+  #balk { position: fixed; left: 0; bottom: 0; height: 3px; width: 0; background: rgba(255, 255, 255, .7); transition: opacity .4s; }
+  .weg { opacity: 0 !important; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="scene" id="s0"><div class="blur"></div><img alt=""></div>
+<div class="scene" id="s1"><div class="blur"></div><img alt=""></div>
+
+<button id="play" class="glas weg" aria-label="Afspelen"><svg viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z"/></svg></button>
+<div id="melding" class="glas weg"></div>
+<div id="delen"><button class="glas" data-deel="0"></button><button class="glas" data-deel="1"></button></div>
+<div id="balk"></div>
+<audio id="audio" preload="auto"></audio>
+
+<script>
+// tijd = seconden in de audio waarop de volgende plaat in beeld komt
+const DELEN = [
+  {
+    naam: 'Deel 1',
+    audio: 'audio/deel-1.m4a',
+    begin: 'img/1-vlakte.jpg',
+    momenten: [
+      { tijd: 181.4, plaat: 'img/2-muur.jpg' }, // "'Als je kon vliegen, kon je er dan overheen vliegen?' vroeg hij toen."
+    ],
+  },
+  {
+    naam: 'Deel 2',
+    audio: 'audio/deel-2.m4a',
+    begin: 'img/2-muur.jpg',
+    momenten: [
+      { tijd: 97.3, plaat: 'img/3-huis.jpg' }, // "Dan moet je kijken naar de foto."
+    ],
+    einde: 'img/3-huis.jpg',
+    openVanaf: '2026-11-19T06:00:00+01:00',
+  },
+];
+
+const $ = s => document.querySelector(s);
+const audio = $('#audio'), play = $('#play'), melding = $('#melding'), delen = $('#delen'), balk = $('#balk');
+const knoppen = [...delen.querySelectorAll('button')];
+const scenes = [$('#s0'), $('#s1')];
+let zichtbaar = 0, huidigePlaat = null, wissel = 0, deel = 0, klaar = false, wakeLock = null;
+
+new Set(DELEN.flatMap(d => [d.begin, d.einde, ...d.momenten.map(m => m.plaat)]).filter(Boolean)).forEach(src => { new Image().src = src; });
+
+function toon(src) {
+  if (src === huidigePlaat) return;
+  huidigePlaat = src;
+  const nr = ++wissel, volgende = scenes[1 - zichtbaar], img = volgende.querySelector('img');
+  img.src = src;
+  volgende.querySelector('.blur').style.backgroundImage = `url("${src}")`;
+  img.decode().catch(() => {}).then(() => {
+    if (nr !== wissel) return;
+    volgende.classList.add('on');
+    scenes[zichtbaar].classList.remove('on');
+    zichtbaar = 1 - zichtbaar;
+  });
+}
+
+const isOpen = d => !d.openVanaf || Date.now() >= Date.parse(d.openVanaf);
+
+function wanneerOpen(d) {
+  const o = new Date(d.openVanaf), dagen = Math.round((new Date(o).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 864e5);
+  const dag = dagen === 0 ? 'vandaag' : dagen === 1 ? 'morgen' : o.toLocaleDateString('nl-BE', { weekday: 'long', day: 'numeric', month: 'long' });
+  return `${dag} om ${o.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+function plaatOp(t) {
+  let p = DELEN[deel].begin;
+  for (const m of DELEN[deel].momenten) if (t >= m.tijd) p = m.plaat;
+  return p;
+}
+
+function kies(i) {
+  if (!isOpen(DELEN[i])) return;
+  deel = i;
+  klaar = false;
+  audio.src = DELEN[i].audio;
+  audio.load();
+  balk.style.width = 0;
+  toon(DELEN[i].begin);
+  if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: `De muur – ${DELEN[i].naam}`, artist: 'Toon Tellegen' });
+  render();
+}
+
+function render() {
+  const speelt = !audio.paused && !audio.ended;
+  const volgende = DELEN[deel + 1];
+  const wachtOpVolgende = klaar && volgende && !isOpen(volgende);
+  const eindscherm = klaar && !volgende;
+
+  play.classList.toggle('weg', speelt || klaar);
+  melding.classList.toggle('weg', !wachtOpVolgende);
+  if (wachtOpVolgende) melding.textContent = `🔒 ${volgende.naam} · ${wanneerOpen(volgende)}`;
+  delen.classList.toggle('weg', speelt);
+  delen.classList.toggle('stil', eindscherm);
+  balk.classList.toggle('weg', klaar);
+
+  knoppen.forEach((k, i) => {
+    const d = DELEN[i], open = isOpen(d);
+    k.disabled = !open;
+    k.classList.toggle('actief', i === deel);
+    k.textContent = open ? d.naam : `🔒 ${d.naam} · ${wanneerOpen(d)}`;
+  });
+}
+
+async function wakker(aan) {
+  try {
+    if (aan && !wakeLock && 'wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } else if (!aan && wakeLock) {
+      await wakeLock.release();
+    }
+  } catch {}
+}
+
+function speelOfPauzeer() {
+  if (!audio.paused) return audio.pause();
+  if (klaar) return;
+  audio.play().catch(() => {});
+}
+
+audio.addEventListener('timeupdate', () => {
+  toon(plaatOp(audio.currentTime));
+  if (audio.duration) balk.style.width = (audio.currentTime / audio.duration * 100) + '%';
+});
+audio.addEventListener('play', () => { wakker(true); render(); });
+audio.addEventListener('pause', () => { wakker(false); render(); });
+audio.addEventListener('ended', () => {
+  localStorage.setItem(`klaar-${deel}`, '1');
+  klaar = true;
+  const d = DELEN[deel], volgende = DELEN[deel + 1];
+  if (d.einde) toon(d.einde);
+  if (volgende && isOpen(volgende)) kies(deel + 1); else render();
+});
+
+document.body.addEventListener('click', speelOfPauzeer);
+document.addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); speelOfPauzeer(); } });
+knoppen.forEach((k, i) => k.addEventListener('click', e => {
+  e.stopPropagation();
+  if (i !== deel || klaar) kies(i);
+}));
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !audio.paused) wakker(true); });
+
+setInterval(() => {
+  const volgende = DELEN[deel + 1];
+  if (klaar && volgende && isOpen(volgende)) kies(deel + 1); else render();
+}, 20000);
+
+kies(localStorage.getItem('klaar-0') && isOpen(DELEN[1]) ? 1 : 0);
+</script>
+</body>
+</html>
