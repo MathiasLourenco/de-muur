@@ -3,7 +3,7 @@
 Mini-website: mijn voorlezing van "De muur" (Toon Tellegen, uit *Waar gaan we eigenlijk heen*), met de platen van Thé Tjong-Khing die op vaste momenten in beeld komen. Alleen voor persoonlijk gebruik.
 
 - **Deel 1**: start op de vlakte. Bij "…vroeg hij toen. Hier heb je een foto" (181,4 s) komt de muur in beeld.
-- **Deel 2**: gaat open op 19/11/2026 om 06:00. Start op de muur. Bij "Dan moet je kijken naar de foto" (97,3 s) komt het huis in beeld. Die plaat blijft als eindscherm staan.
+- **Deel 2**: gaat open op 19/11/2026 om 20:00. Start op de muur. Bij "Dan moet je kijken naar de foto" (97,3 s) komt het huis in beeld. Die plaat blijft als eindscherm staan.
 
 ## Nieuwe audio
 
